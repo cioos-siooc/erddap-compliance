@@ -164,7 +164,7 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-s",
         "--standards",
-        help="",
+        help="What Compliance Checker standards each dataset should be checked against.  Multiple standards may be specified as a CSV string. A full list of acceptable values may be gathered by running the command \"compliance-checker --list-tests\".  Default: cf:1.6",
         default="cf:1.6",
         action="store",
     )

@@ -1,12 +1,14 @@
 from compliance_checker.runner import ComplianceChecker, CheckSuite
 from erddapy import ERDDAP
 from datetime import datetime, timedelta
+from numpy import double
 import pandas as pd
 import dateutil
 import json
 import argparse
 import traceback
 from pathlib import Path
+
 
 def main(prog_args):
     # print(prog_args)
@@ -34,7 +36,7 @@ def main(prog_args):
     # print("Filtered List: %s" % (filtered_list.to_list()))
 
     list_of_datasets = df.to_dict("records")
-    
+
     print("List of datasets to check for compliance:")
     for ds_name in df["datasetID"].to_list():
         print(" - %s" % (ds_name))
@@ -57,16 +59,25 @@ def run_checker(dataset, prog_args, epy):
     check_suite = CheckSuite()
     check_suite.load_all_available_checkers()
 
+    offset = pd.Timedelta(prog_args.time_offset).to_pytimedelta()
+
     dataset_variables = get_variables(dataset["datasetID"], epy)
+    
+    try:
+        time_check = dateutil.parser.isoparse(dataset["minTime (UTC)"]) + offset
+        epy.constraints = {"time<=": time_check.isoformat()}
 
-    time_check = dateutil.parser.isoparse(dataset["minTime (UTC)"]) + timedelta(
-        seconds=prog_args.time_offset
-    )
+    except TypeError as ex_type:
+        time_check = dateutil.parser.isoparse(dataset["maxTime (UTC)"]) - offset
+        epy.constraints = {"time>=": time_check.isoformat()}
 
-    epy.response = "ncCF" # Request netCDF file
+    except Exception as ex_base:
+        epy.constraints = {"time>": "max(time)-{}".format(prog_args.time_offset)}
+
+
+    epy.response = "ncCF"  # Request netCDF file
     epy.variables = dataset_variables
     epy.dataset_id = dataset["datasetID"]
-    epy.constraints = {"time<=": time_check}
 
     # Set values for compliance checker run
     path = epy.get_download_url()
@@ -86,7 +97,7 @@ def run_checker(dataset, prog_args, epy):
         )
 
     else:
-        # this is the default value the compliance checker assumes when there 
+        # this is the default value the compliance checker assumes when there
         # is no file output and will dump result to stdout
         output_filename = "-"
 
@@ -110,7 +121,7 @@ def run_checker(dataset, prog_args, epy):
         output_filename=output_filename,
         output_format=output_format,
     )
-    
+
     if return_value:
         print("Return Value: ", return_value)
 
@@ -124,8 +135,12 @@ def run_checker(dataset, prog_args, epy):
             for standard in prog_args.standards:
                 scored = cc_data[standard]["scored_points"]
                 possible = cc_data[standard]["possible_points"]
-                
-                print("{}: CC Scored {} out of {} possible points".format(standard, scored, possible))
+
+                print(
+                    "{}: CC Scored {} out of {} possible points".format(
+                        standard, scored, possible
+                    )
+                )
 
 
 def prep_args(prog_args):
@@ -133,6 +148,7 @@ def prep_args(prog_args):
     Prepares submitted arguments for use by the rest of the script.
     """
     prog_args.standards = prog_args.standards.split(",")
+    # prog_args.time_offset = int(prog_args.time_offset)
 
     return prog_args
 
@@ -146,9 +162,7 @@ def get_variables(dataset_id, epy):
     )
 
     metadata = pd.read_csv(filepath_or_buffer=metadata_url)
-    var_names = metadata[
-        metadata["Row Type"] == "variable"
-    ]["Variable Name"].to_list()
+    var_names = metadata[metadata["Row Type"] == "variable"]["Variable Name"].to_list()
 
     return var_names
 
@@ -164,7 +178,7 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-s",
         "--standards",
-        help="What Compliance Checker standards each dataset should be checked against.  Multiple standards may be specified as a CSV string. A full list of acceptable values may be gathered by running the command \"compliance-checker --list-tests\".  Default: cf:1.6",
+        help='What Compliance Checker standards each dataset should be checked against.  Multiple standards may be specified as a CSV string. A full list of acceptable values may be gathered by running the command "compliance-checker --list-tests".  Default: cf:1.6',
         default="cf:1.6",
         action="store",
     )
@@ -202,22 +216,22 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-t",
         "--time_offset",
-        help="How many seconds from maxTime (UTC) should a dataset be queried.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file.  Default: 5",
+        help="How many seconds from maxTime (UTC) should a dataset be queried.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file.  Default: 86400 (1 day)",
         action="store",
-        default=5,
+        default="1day",
     )
 
     raw_args.add_argument(
-        "-v", 
-        "--verbose", 
-        help="Passes the desired verbosity flag to the compliance checker library. Acceptable Values: 0, 1, 2.  The higher the value, the more verbose the output.  Default: 0", 
-        action="store", 
-        default=0
+        "-v",
+        "--verbose",
+        help="Passes the desired verbosity flag to the compliance checker library. Acceptable Values: 0, 1, 2.  The higher the value, the more verbose the output.  Default: 0",
+        action="store",
+        default=0,
     )
 
     prog_args = raw_args.parse_args()
 
-    # do some pre-processing on the arguments to make them ready for the 
+    # do some pre-processing on the arguments to make them ready for the
     # script to interpret
     prog_args = prep_args(prog_args)
 

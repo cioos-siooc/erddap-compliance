@@ -1,3 +1,4 @@
+import requests
 from compliance_checker.runner import ComplianceChecker, CheckSuite
 from erddapy import ERDDAP
 from datetime import datetime, timedelta
@@ -8,7 +9,6 @@ import json
 import argparse
 import traceback
 from pathlib import Path
-
 
 def main(prog_args):
     # print(prog_args)
@@ -80,7 +80,15 @@ def run_checker(dataset, prog_args, epy):
     epy.dataset_id = dataset["datasetID"]
 
     # Set values for compliance checker run
-    path = epy.get_download_url()
+    download_url = epy.get_download_url()
+
+    # If download_local flag is set, download the sample NetCDF file, otherwise
+    # pass url to compliance checker
+    if prog_args.download_local:
+        path = fetch_dataset_sample(prog_args=prog_args, dataset_id=dataset["datasetID"], download_url=download_url)
+    else:
+        path = download_url
+
     checker_names = prog_args.standards
     verbose = prog_args.verbose
     criteria = "normal"
@@ -141,6 +149,23 @@ def run_checker(dataset, prog_args, epy):
                         standard, scored, possible
                     )
                 )
+
+def fetch_dataset_sample(prog_args, dataset_id, download_url):
+    """
+    Fetches a NetCDF file from the ERDDAP server, saves it locally to a work 
+    directory and returns a path to the file.
+    """
+
+    data = requests.get(url=download_url)
+    local_path = Path(prog_args.work, dataset_id + ".nc")
+
+    if not Path(prog_args.work).exists():
+        Path(prog_args.work).mkdir(parents=True, exist_ok=True)
+
+    with open(local_path, "wb") as file:
+        file.write(data.content)
+
+    return local_path.as_posix()
 
 
 def prep_args(prog_args):
@@ -216,7 +241,7 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-t",
         "--time_offset",
-        help="How many seconds from maxTime (UTC) should a dataset be queried.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file.  Default: 86400 (1 day)",
+        help="A python Timedelta string that specifies the time range of data to retreive from each dataset.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file.  Default: 1day",
         action="store",
         default="1day",
     )
@@ -227,6 +252,19 @@ if __name__ == "__main__":
         help="Passes the desired verbosity flag to the compliance checker library. Acceptable Values: 0, 1, 2.  The higher the value, the more verbose the output.  Default: 0",
         action="store",
         default=0,
+    )
+
+    raw_args.add_argument(
+        "--download_local",
+        help="Download NetCDF file samples and process them locally rather than on-the-fly from the ERDDAP server.",
+        action="store_true",
+    )
+
+    raw_args.add_argument(
+        "--work",
+        help="Specify the temporary working directory for downloaded sample files.",
+        action="store",
+        default="./tmp_work/",
     )
 
     prog_args = raw_args.parse_args()

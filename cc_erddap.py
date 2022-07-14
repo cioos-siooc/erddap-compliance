@@ -1,3 +1,4 @@
+from types import TracebackType
 import requests
 from compliance_checker.runner import ComplianceChecker, CheckSuite
 from erddapy import ERDDAP
@@ -9,6 +10,7 @@ import json
 import argparse
 import traceback
 from pathlib import Path
+import io
 
 def main(prog_args):
     # print(prog_args)
@@ -61,17 +63,23 @@ def run_checker(dataset, prog_args, epy):
 
     offset = pd.Timedelta(prog_args.time_offset).to_pytimedelta()
 
-    dataset_variables = get_variables(dataset["datasetID"], epy)
+    dataset_variables = get_variables(prog_args, dataset["datasetID"], epy)
     
     try:
         time_check = dateutil.parser.isoparse(dataset["minTime (UTC)"]) + offset
         epy.constraints = {"time<=": time_check.isoformat()}
 
     except TypeError as ex_type:
+        # print("ERROR: ", ex_type.with_traceback())
         time_check = dateutil.parser.isoparse(dataset["maxTime (UTC)"]) - offset
         epy.constraints = {"time>=": time_check.isoformat()}
 
+    except OSError as ex_os:
+        pass
+        # print("ERROR: ", ex_os.with_traceback())
+
     except Exception as ex_base:
+        # print("ERROR: ", ex_base.with_traceback())
         epy.constraints = {"time>": "max(time)-{}".format(prog_args.time_offset)}
 
 
@@ -156,7 +164,7 @@ def fetch_dataset_sample(prog_args, dataset_id, download_url):
     directory and returns a path to the file.
     """
 
-    data = requests.get(url=download_url)
+    data = requests.get(url=download_url, timeout=prog_args.timeout, verify=prog_args.disable_ssl_verify)
     local_path = Path(prog_args.work, dataset_id + ".nc")
 
     if not Path(prog_args.work).exists():
@@ -178,7 +186,7 @@ def prep_args(prog_args):
     return prog_args
 
 
-def get_variables(dataset_id, epy):
+def get_variables(prog_args, dataset_id, epy):
     """
     Extract and return variable names as a list from a specified ERDDAP dataset.
     """
@@ -186,7 +194,9 @@ def get_variables(dataset_id, epy):
         dataset_id="%s/index" % (dataset_id), response="csv", protocol="info"
     )
 
-    metadata = pd.read_csv(filepath_or_buffer=metadata_url)
+    metadata_request = requests.get(url=metadata_url, timeout=prog_args.timeout, verify=prog_args.disable_ssl_verify).content
+
+    metadata = pd.read_csv(filepath_or_buffer=io.StringIO(metadata_request.decode('utf-8')))
     var_names = metadata[metadata["Row Type"] == "variable"]["Variable Name"].to_list()
 
     return var_names
@@ -241,9 +251,17 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-t",
         "--time_offset",
-        help="A python Timedelta string that specifies the time range of data to retreive from each dataset.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file.  Default: 1day",
+        help="A python Timedelta string that specifies the time range of data to retrieve from each dataset.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file.  Default: 1day",
         action="store",
         default="1day",
+    )
+
+    raw_args.add_argument(
+        "--timeout",
+        help="Number of seconds to wait for a response from the ERDDAP server when downloading a sample of a dataset locally",
+        action="store",
+        type=int,
+        default=30,
     )
 
     raw_args.add_argument(
@@ -252,6 +270,12 @@ if __name__ == "__main__":
         help="Passes the desired verbosity flag to the compliance checker library. Acceptable Values: 0, 1, 2.  The higher the value, the more verbose the output.  Default: 0",
         action="store",
         default=0,
+    )
+
+    raw_args.add_argument(
+        "--disable_ssl_verify",
+        help="Disables the SSL verify check of the target server, this is insecure and potentially dangerous, do not use this option unless you trust the destination server and understand why the certificate on that server may be causing issues.",
+        action="store_false",
     )
 
     raw_args.add_argument(

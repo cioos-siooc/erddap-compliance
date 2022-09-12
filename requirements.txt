@@ -3,9 +3,9 @@ certifi==2021.10.8
 cf-units==3.0.1.post0
 cftime==1.5.2
 charset-normalizer==2.0.10
-compliance-checker==4.3.4
+compliance-checker==5.0.2
 decorator==5.1.1
-erddapy==1.2.0
+erddapy==1.2.1
 idna==3.3
 isodate==0.6.1
 Jinja2==3.0.3

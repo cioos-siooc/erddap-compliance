@@ -75,7 +75,6 @@ def run_checker(dataset, prog_args, epy):
         print(url)
         res=pd.read_csv(url,skiprows=[1])
         max_time=res['time'].to_list().pop()
-        print('max_time',max_time)
         last_hour_of_dataset = (parser.parse(max_time) - timedelta(hours=1))
         epy.constraints = {"time>=": last_hour_of_dataset.isoformat()}
     else:
@@ -142,11 +141,7 @@ def run_checker(dataset, prog_args, epy):
                 scored = cc_data[standard]["scored_points"]
                 possible = cc_data[standard]["possible_points"]
 
-                print(
-                    "{}: CC Scored {} out of {} possible points".format(
-                        standard, scored, possible
-                    )
-                )
+                print(f"{standard}: CC Scored {scored} out of {possible} possible points")
 
 def fetch_dataset_sample(prog_args, dataset_id, download_url):
     """
@@ -231,7 +226,6 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "--timeout",
         help="Number of seconds to wait for a response from the ERDDAP server when downloading a sample of a dataset locally",
-        action="store",
         type=int,
         default=30,
     )

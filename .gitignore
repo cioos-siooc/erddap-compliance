@@ -118,3 +118,6 @@ workspace.code-workspace
 reports/
 tmp_work/
 results
+.venv
+venv
+notforrepo

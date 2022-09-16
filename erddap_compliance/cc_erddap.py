@@ -23,12 +23,14 @@ def cc_erddap(prog_args):
     epy.dataset_id = "allDatasets"
     epy.constraints={'cdm_data_type!=':"Other","tabledap!=":""}
 
+    # If a single dataset is desired add an additional constraint to select 
+    # only that dataset from ERDDAP dataset list
+    if prog_args.dataset_id:
+        epy.constraints["datasetID="] = prog_args.dataset_id
+
     df = epy.to_pandas()
     df = df[df["datasetID"] != "allDatasets"]
     
-    if prog_args.dataset_id:
-        df = df[df["datasetID"].str.contains(prog_args.dataset_id)]
-
     if prog_args.exclude_regex:
         # print("Filtering dataset list via RegEx...")
         filtered_list = df["datasetID"].str.contains(prog_args.exclude)

@@ -55,7 +55,7 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-t",
         "--time_offset",
-        help="A python Timedelta string that specifies the time range of data to retreive from each dataset.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file",
+        help="A python Timedelta string that specifies the time range of data to retrieve from each dataset.  This is to reduce the size of netCDF files being queried from the ERDDAP server, since metadata compliance is what's being audited and not the actual data, we only need 1 or more records to get a valid netCDF file",
         default="1hour",
     )
 
@@ -70,8 +70,9 @@ if __name__ == "__main__":
         "-v",
         "--verbose",
         help="Passes the desired verbosity flag to the compliance checker library. Acceptable Values: 0, 1, 2.  The higher the value, the more verbose the output.  Default: 0",
-        action="store_true",
-        default=False,
+        action="store",
+        default=0,
+        type=int
     )
 
 

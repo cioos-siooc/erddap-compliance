@@ -4,6 +4,8 @@ A wrapper for the [IOOS Compliance Checker](https://github.com/ioos/compliance-c
 
 By default, it is assumed that all datasets will be checked.  Users can specify an explicit list of datasets to be ignored.  Alternatively, a regular expression can be used to select the datasets to be ignored.
 
+## Usage
+
 ```
 usage: cc_erddap.py [-h] [-s STANDARDS] [-e EXCLUDE] [--exclude_regex] [-f FORMAT] [-o OUTPUT_DIR] [-t TIME_OFFSET] [--timeout TIMEOUT] [-v VERBOSE] [--disable_ssl_verify]
                     [--download_local] [--work WORK]
@@ -60,3 +62,11 @@ optional arguments:
   --work WORK           Specify the temporary working directory for downloaded sample 
                         files.
 ```
+
+### Using Docker
+
+```sh
+docker build . -t cioos-siooc/erddap-compliance
+docker run -v "`pwd`/results:/results" cioos-siooc/erddap-compliance https://data.cioospacific.ca/erddap --dataset_id ECCC_MSC_BUOYS
+```
+

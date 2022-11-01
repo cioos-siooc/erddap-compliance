@@ -12,7 +12,8 @@ def prep_args(prog_args):
     return prog_args
 
 if __name__ == "__main__":
-    raw_args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    raw_args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, 
+        prog='python -m erddap_compliance')
     raw_args.add_argument(
         "erddap_server",
         help="The URL of an ERDDAP instance e.g. https://www.example.com/erddap/",

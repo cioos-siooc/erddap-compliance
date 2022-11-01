@@ -48,7 +48,7 @@ def cc_erddap(prog_args):
         try:
             run_checker(dataset, prog_args)
         except urllib.error.HTTPError as e:
-            print("No data found")
+            print("No data found", e)
 
         except Exception:
             print(f'ERROR:  Could not validate dataset: {dataset["datasetID"]}')
@@ -66,6 +66,7 @@ def generate_sample_url_tabledap(dataset,server,prog_args):
         protocol="tabledap",
     )
 
+    # if max(time) is not available in this dataset, query to get most recent time
     if str(dataset["maxTime"])=='nan':
         url_max_time=f'{server}/tabledap/{dataset["datasetID"]}.csv?time&orderByMax("time")'
         res=pd.read_csv(url_max_time,skiprows=[1])
@@ -76,12 +77,12 @@ def generate_sample_url_tabledap(dataset,server,prog_args):
         epy.constraints = {"time>": f"max(time)-{prog_args.time_offset}"}
 
     # cdm_data_type==Other doesn't support ncCF downloads
-
     if dataset['cdm_data_type']=="Other":
         epy.response = "nc"
     else:
         # Using ncCF to avoid "it is detected as a point" errors
         epy.response = "ncCF"  # Request netCDF file
+
     epy.dataset_id = dataset["datasetID"]
 
     # Set values for compliance checker run

@@ -14,23 +14,15 @@ from urllib.parse import urlparse
 def cc_erddap(prog_args):
     # print(prog_args)
     erddap_hostname = urlparse(prog_args.erddap_server).netloc
-
-    epy = ERDDAP(
-        server=prog_args.erddap_server,
-        protocol="tabledap",
-    )
-    epy.response = "json"
-    epy.dataset_id = "allDatasets"
-    epy.constraints={'cdm_data_type!=':"Other","tabledap!=":""}
-
-    # If a single dataset is desired add an additional constraint to select 
-    # only that dataset from ERDDAP dataset list
-    if prog_args.dataset_id:
-        epy.constraints["datasetID="] = prog_args.dataset_id
-
-    df = epy.to_pandas()
-    df = df[df["datasetID"] != "allDatasets"]
     
+    # Row 2 is the "allDatasets" dataset
+    df = pd.read_csv(prog_args.erddap_server + "/tabledap/allDatasets.csv",skiprows=[1,2])
+
+    # # If a single dataset is desired add an additional constraint to select 
+    # # only that dataset from ERDDAP dataset list
+    if prog_args.dataset_id:
+        df = df.query(f"datasetID=='{prog_args.dataset_id}'")
+
     if prog_args.exclude_regex:
         # print("Filtering dataset list via RegEx...")
         filtered_list = df["datasetID"].str.contains(prog_args.exclude)
@@ -39,8 +31,6 @@ def cc_erddap(prog_args):
         # print("Filtering explicit list of datasets...")
         filtered_list = df["datasetID"].isin(prog_args.exclude.split(","))
         df = df[~filtered_list]
-
-    # print("Filtered List: %s" % (filtered_list.to_list()))
 
     list_of_datasets = df.to_dict("records")
 
@@ -56,37 +46,79 @@ def cc_erddap(prog_args):
     for dataset in list_of_datasets:
         print(dataset["datasetID"], dataset["tabledap"])
         try:
-            run_checker(dataset, prog_args, epy)
+            run_checker(dataset, prog_args)
         except urllib.error.HTTPError as e:
-            print("No data found")
+            print("No data found", e)
 
         except Exception:
             print(f'ERROR:  Could not validate dataset: {dataset["datasetID"]}')
             traceback.print_exc()
 
+def generate_sample_url_tabledap(dataset,server,prog_args):
+    """
+    Generates a URL to download a sample amount of data from tabledap dataset
+    
+    Uses "time>max(time)-1hour" as a default query
+    """
 
-def run_checker(dataset, prog_args, epy):
-    # Load all available checker classes
-    check_suite = CheckSuite()
-    check_suite.load_all_available_checkers()
+    epy = ERDDAP(
+        server=server,
+        protocol="tabledap",
+    )
 
-    if str(dataset["maxTime (UTC)"])=='nan':
-        url=f'{prog_args.erddap_server}/tabledap/{dataset["datasetID"]}.csv?time&orderByMax("time")'
-        print(url)
-        res=pd.read_csv(url,skiprows=[1])
+    # if max(time) is not available in this dataset, query to get most recent time
+    if str(dataset["maxTime"])=='nan':
+        url_max_time=f'{server}/tabledap/{dataset["datasetID"]}.csv?time&orderByMax("time")'
+        res=pd.read_csv(url_max_time,skiprows=[1])
         max_time=res['time'].to_list().pop()
         last_hour_of_dataset = (parser.parse(max_time) - timedelta(hours=1))
         epy.constraints = {"time>=": last_hour_of_dataset.isoformat()}
     else:
         epy.constraints = {"time>": f"max(time)-{prog_args.time_offset}"}
 
+    # cdm_data_type==Other doesn't support ncCF downloads
+    if dataset['cdm_data_type']=="Other":
+        epy.response = "nc"
+    else:
+        # Using ncCF to avoid "it is detected as a point" errors
+        epy.response = "ncCF"  # Request netCDF file
 
-    epy.response = "ncCF"  # Request netCDF file
     epy.dataset_id = dataset["datasetID"]
 
     # Set values for compliance checker run
     download_url = epy.get_download_url()
+    return download_url
+
+def generate_sample_url_griddap(dataset,server):
+    """
+    Generates a URL to download a sample amount of data from griddap dataset
+    Uses the `last` keyword to query the start and end value for each dimension
+    """
+
+    dataset_id=dataset["datasetID"]
+    url_index_csv = f"{server}/info/{dataset_id}/index.csv"
+    url_data_csv = f"{server}/griddap/{dataset_id}.nc"
+    df=pd.read_csv(url_index_csv)
+    dimensions = df.query('`Row Type`=="dimension"')['Variable Name'].unique()
+    variables = df.query('`Row Type`=="variable"')['Variable Name'].unique()
+    dimension_query=''.join(["[(last):1:(last)]" for x in dimensions])
+    dataset_query=",".join([x + dimension_query for x in variables])
+    download_url= url_data_csv + "?" + dataset_query
+    return download_url
+
+def run_checker(dataset, prog_args):
+    # Load all available checker classes
+    check_suite = CheckSuite()
+    check_suite.load_all_available_checkers()
+    
+    if dataset['dataStructure']=="table":
+        download_url = generate_sample_url_tabledap(dataset,prog_args.erddap_server,prog_args)
+        
+    elif dataset['dataStructure']=='grid':
+        download_url = generate_sample_url_griddap(dataset,prog_args.erddap_server)
+
     print("Downloading",download_url)
+    
     # If download_local flag is set, download the sample NetCDF file, otherwise
     # pass url to compliance checker
     download_path = fetch_dataset_sample(prog_args=prog_args, dataset_id=dataset["datasetID"], download_url=download_url)

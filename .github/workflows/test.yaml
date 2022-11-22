@@ -33,3 +33,6 @@ jobs:
 
           # file backed dataset
           python -m erddap_compliance https://data.cioospacific.ca/erddap --dataset_id BCSOP_monthly
+
+          # Grid dataset
+          python -m erddap_compliance https://erddap.ogsl.ca/erddap --dataset_id mpoAlguesToxiquesPred1-24

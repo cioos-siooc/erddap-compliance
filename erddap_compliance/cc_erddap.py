@@ -11,6 +11,7 @@ import requests
 from compliance_checker.runner import CheckSuite, ComplianceChecker
 from dateutil import parser
 from erddapy import ERDDAP
+from loguru import logger
 
 
 def cc_erddap(prog_args):
@@ -28,19 +29,17 @@ def cc_erddap(prog_args):
         df = df.query(f"datasetID=='{prog_args.dataset_id}'")
 
     if prog_args.exclude_regex:
-        # print("Filtering dataset list via RegEx...")
+        logger.info("Filtering dataset list via RegEx...")
         filtered_list = df["datasetID"].str.contains(prog_args.exclude)
         df = df[~filtered_list]
     else:
-        # print("Filtering explicit list of datasets...")
+        logger.info("Filtering explicit list of datasets...")
         filtered_list = df["datasetID"].isin(prog_args.exclude.split(","))
         df = df[~filtered_list]
 
     list_of_datasets = df.to_dict("records")
 
-    print("List of datasets to check for compliance:")
-    for dataset_id in df["datasetID"].to_list():
-        print(f" - {dataset_id}")
+    logger.info("List of datasets to check for compliance: {}", df["datasetID"].to_list())
 
     # Ensure path to output directory exists, if not create it
     prog_args.output_dir = os.path.join(prog_args.output_dir, erddap_hostname)
@@ -48,14 +47,14 @@ def cc_erddap(prog_args):
         Path(prog_args.output_dir).mkdir(parents=True, exist_ok=True)
 
     for dataset in list_of_datasets:
-        print(dataset["datasetID"], dataset["tabledap"])
+        logger.info(f"{dataset['datasetID']=}, {dataset['tabledap']=}")
         try:
             run_checker(dataset, prog_args)
         except urllib.error.HTTPError as e:
-            print("No data found", e)
+            logger.error(f"No data found: {e}")
 
         except Exception:
-            print(f"ERROR:  Could not validate dataset: {dataset['datasetID']}")
+            logger.error(f"ERROR:  Could not validate dataset: {dataset['datasetID']}")
             traceback.print_exc()
 
 
@@ -124,7 +123,7 @@ def run_checker(dataset, prog_args):
     elif dataset["dataStructure"] == "grid":
         download_url = generate_sample_url_griddap(dataset, prog_args.erddap_server)
 
-    print("Downloading", download_url)
+    logger.info(f"Downloading {download_url}")
 
     # If download_local flag is set, download the sample NetCDF file, otherwise
     # pass url to compliance checker
@@ -133,7 +132,7 @@ def run_checker(dataset, prog_args):
     )
 
     if not download_path:
-        print("Error in dataset ", dataset["datasetID"])
+        logger.error(f"Error in dataset {dataset['datasetID']}")
         return
 
     # If text format is selected make file extension "txt" instead
@@ -168,10 +167,10 @@ def run_checker(dataset, prog_args):
     )
 
     if return_value:
-        print("Return Value: ", return_value)
+        logger.info(f"Return Value: {return_value}")
 
     if errors:
-        print("Errors: ", errors)
+        logger.error(f"Errors: {errors}")
 
     # Open the JSON output and get the compliance scores
     if prog_args.format == "json":
@@ -181,7 +180,7 @@ def run_checker(dataset, prog_args):
                 scored = cc_data[standard]["scored_points"]
                 possible = cc_data[standard]["possible_points"]
 
-                print(
+                logger.info(
                     f"{standard}: CC Scored {scored} out of {possible} possible points",
                 )
 
@@ -202,5 +201,5 @@ def fetch_dataset_sample(prog_args, dataset_id, download_url):
             file.write(response.content)
 
         return local_path.as_posix()
-    print(response.text)
+    logger.error(response.text)
     return None

@@ -6,11 +6,14 @@ By default, it is assumed that all datasets will be checked. Users can specify a
 
 ## Installation
 
+This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python package management.
+
 ```sh
-pip install venv --user
-python -m venv venv
-source venv/bin/activate
-pip install -e .
+# Install uv if you don't have it already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install the project and its dependencies
+uv sync
 ```
 
 ## Usage
@@ -18,23 +21,20 @@ pip install -e .
 Examples:
 
 ```bash
-# Activate Python 3 environment
-source venv/bin/activate
-
 # Test all datasets in ERDDAP with CF 1.6, then see results in 'results' folder:
-python -m erddap_compliance https://catalogue.hakai.org/erddap
+uv run python -m erddap_compliance https://catalogue.hakai.org/erddap
 
 # Specify tests to run
-python -m erddap_compliance https://catalogue.hakai.org/erddap -s cf:1.8,acdd
+uv run python -m erddap_compliance https://catalogue.hakai.org/erddap -s cf:1.8,acdd
 
 # Single dataset:
-python -m erddap_compliance https://www.smartatlantic.ca/erddap --dataset_id SMA_bay_of_islands
+uv run python -m erddap_compliance https://www.smartatlantic.ca/erddap --dataset_id SMA_bay_of_islands
 ```
 
 ### Complete usage:
 
 ```sh
-usage: python -m erddap_compliance [-h] [-s STANDARDS] [-e EXCLUDE] [--exclude_regex] [-f FORMAT] [-o OUTPUT_DIR] [-t TIME_OFFSET] [--timeout TIMEOUT] [-v VERBOSE] [--disable_ssl_verify]
+usage: uv run python -m erddap_compliance [-h] [-s STANDARDS] [-e EXCLUDE] [--exclude_regex] [-f FORMAT] [-o OUTPUT_DIR] [-t TIME_OFFSET] [--timeout TIMEOUT] [-v VERBOSE] [--disable_ssl_verify]
                     [--download_local] [--work WORK]
                     erddap_server
 

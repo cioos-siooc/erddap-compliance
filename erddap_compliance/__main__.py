@@ -49,7 +49,7 @@ if __name__ == "__main__":
     raw_args.add_argument(
         "-o",
         "--output_dir",
-        help=f"Where reports should be written to",
+        help="Where reports should be written to",
         default="results",
     )
 

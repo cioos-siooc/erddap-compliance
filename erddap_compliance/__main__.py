@@ -1,19 +1,22 @@
 import argparse
+
 from erddap_compliance.cc_erddap import cc_erddap
 
 
 def prep_args(prog_args):
-    """
-    Prepares submitted arguments for use by the rest of the script.
+    """Prepares submitted arguments for use by the rest of the script.
     """
     prog_args.standards = prog_args.standards.split(",")
     # prog_args.time_offset = int(prog_args.time_offset)
 
     return prog_args
 
+
 if __name__ == "__main__":
-    raw_args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, 
-        prog='python -m erddap_compliance')
+    raw_args = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        prog="python -m erddap_compliance",
+    )
     raw_args.add_argument(
         "erddap_server",
         help="The URL of an ERDDAP instance e.g. https://www.example.com/erddap/",
@@ -73,9 +76,8 @@ if __name__ == "__main__":
         help="Passes the desired verbosity flag to the compliance checker library. Acceptable Values: 0, 1, 2.  The higher the value, the more verbose the output.  Default: 0",
         action="store",
         default=0,
-        type=int
+        type=int,
     )
-
 
     raw_args.add_argument(
         "--work",

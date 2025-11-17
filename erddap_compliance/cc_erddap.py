@@ -1,24 +1,28 @@
-import requests
-from compliance_checker.runner import ComplianceChecker, CheckSuite
-from erddapy import ERDDAP
-from dateutil import parser
-import pandas as pd
-from datetime import timedelta
 import json
-import traceback
-from pathlib import Path
 import os
+import traceback
 import urllib
+from datetime import timedelta
+from pathlib import Path
 from urllib.parse import urlparse
+
+import pandas as pd
+import requests
+from compliance_checker.runner import CheckSuite, ComplianceChecker
+from dateutil import parser
+from erddapy import ERDDAP
+
 
 def cc_erddap(prog_args):
     # print(prog_args)
     erddap_hostname = urlparse(prog_args.erddap_server).netloc
-    
-    # Row 2 is the "allDatasets" dataset
-    df = pd.read_csv(prog_args.erddap_server + "/tabledap/allDatasets.csv",skiprows=[1,2])
 
-    # # If a single dataset is desired add an additional constraint to select 
+    # Row 2 is the "allDatasets" dataset
+    df = pd.read_csv(
+        prog_args.erddap_server + "/tabledap/allDatasets.csv", skiprows=[1, 2],
+    )
+
+    # # If a single dataset is desired add an additional constraint to select
     # # only that dataset from ERDDAP dataset list
     if prog_args.dataset_id:
         df = df.query(f"datasetID=='{prog_args.dataset_id}'")
@@ -39,7 +43,7 @@ def cc_erddap(prog_args):
         print(f" - {dataset_id}")
 
     # Ensure path to output directory exists, if not create it
-    prog_args.output_dir=os.path.join(prog_args.output_dir,erddap_hostname)
+    prog_args.output_dir = os.path.join(prog_args.output_dir, erddap_hostname)
     if not Path(prog_args.output_dir).exists():
         Path(prog_args.output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -51,33 +55,34 @@ def cc_erddap(prog_args):
             print("No data found", e)
 
         except Exception:
-            print(f'ERROR:  Could not validate dataset: {dataset["datasetID"]}')
+            print(f"ERROR:  Could not validate dataset: {dataset['datasetID']}")
             traceback.print_exc()
 
-def generate_sample_url_tabledap(dataset,server,prog_args):
-    """
-    Generates a URL to download a sample amount of data from tabledap dataset
-    
+
+def generate_sample_url_tabledap(dataset, server, prog_args):
+    """Generates a URL to download a sample amount of data from tabledap dataset
+
     Uses "time>max(time)-1hour" as a default query
     """
-
     epy = ERDDAP(
         server=server,
         protocol="tabledap",
     )
 
     # if max(time) is not available in this dataset, query to get most recent time
-    if str(dataset["maxTime"])=='nan':
-        url_max_time=f'{server}/tabledap/{dataset["datasetID"]}.csv?time&orderByMax("time")'
-        res=pd.read_csv(url_max_time,skiprows=[1])
-        max_time=res['time'].to_list().pop()
-        last_hour_of_dataset = (parser.parse(max_time) - timedelta(hours=1))
+    if str(dataset["maxTime"]) == "nan":
+        url_max_time = (
+            f'{server}/tabledap/{dataset["datasetID"]}.csv?time&orderByMax("time")'
+        )
+        res = pd.read_csv(url_max_time, skiprows=[1])
+        max_time = res["time"].to_list().pop()
+        last_hour_of_dataset = parser.parse(max_time) - timedelta(hours=1)
         epy.constraints = {"time>=": last_hour_of_dataset.isoformat()}
     else:
         epy.constraints = {"time>": f"max(time)-{prog_args.time_offset}"}
 
     # cdm_data_type==Other doesn't support ncCF downloads
-    if dataset['cdm_data_type']=="Other":
+    if dataset["cdm_data_type"] == "Other":
         epy.response = "nc"
     else:
         # Using ncCF to avoid "it is detected as a point" errors
@@ -89,49 +94,55 @@ def generate_sample_url_tabledap(dataset,server,prog_args):
     download_url = epy.get_download_url()
     return download_url
 
-def generate_sample_url_griddap(dataset,server):
-    """
-    Generates a URL to download a sample amount of data from griddap dataset
+
+def generate_sample_url_griddap(dataset, server):
+    """Generates a URL to download a sample amount of data from griddap dataset
     Uses the `last` keyword to query the start and end value for each dimension
     """
-
-    dataset_id=dataset["datasetID"]
+    dataset_id = dataset["datasetID"]
     url_index_csv = f"{server}/info/{dataset_id}/index.csv"
     url_data_csv = f"{server}/griddap/{dataset_id}.nc"
-    df=pd.read_csv(url_index_csv)
-    dimensions = df.query('`Row Type`=="dimension"')['Variable Name'].unique()
-    variables = df.query('`Row Type`=="variable"')['Variable Name'].unique()
-    dimension_query=''.join(["[(last):1:(last)]" for x in dimensions])
-    dataset_query=",".join([x + dimension_query for x in variables])
-    download_url= url_data_csv + "?" + dataset_query
+    df = pd.read_csv(url_index_csv)
+    dimensions = df.query('`Row Type`=="dimension"')["Variable Name"].unique()
+    variables = df.query('`Row Type`=="variable"')["Variable Name"].unique()
+    dimension_query = "".join(["[(last):1:(last)]" for x in dimensions])
+    dataset_query = ",".join([x + dimension_query for x in variables])
+    download_url = url_data_csv + "?" + dataset_query
     return download_url
+
 
 def run_checker(dataset, prog_args):
     # Load all available checker classes
     check_suite = CheckSuite()
     check_suite.load_all_available_checkers()
-    
-    if dataset['dataStructure']=="table":
-        download_url = generate_sample_url_tabledap(dataset,prog_args.erddap_server,prog_args)
-        
-    elif dataset['dataStructure']=='grid':
-        download_url = generate_sample_url_griddap(dataset,prog_args.erddap_server)
 
-    print("Downloading",download_url)
-    
+    if dataset["dataStructure"] == "table":
+        download_url = generate_sample_url_tabledap(
+            dataset, prog_args.erddap_server, prog_args,
+        )
+
+    elif dataset["dataStructure"] == "grid":
+        download_url = generate_sample_url_griddap(dataset, prog_args.erddap_server)
+
+    print("Downloading", download_url)
+
     # If download_local flag is set, download the sample NetCDF file, otherwise
     # pass url to compliance checker
-    download_path = fetch_dataset_sample(prog_args=prog_args, dataset_id=dataset["datasetID"], download_url=download_url)
-    
+    download_path = fetch_dataset_sample(
+        prog_args=prog_args, dataset_id=dataset["datasetID"], download_url=download_url,
+    )
+
     if not download_path:
-        print("Error in dataset ",dataset["datasetID"])
-        return None
+        print("Error in dataset ", dataset["datasetID"])
+        return
 
     # If text format is selected make file extension "txt" instead
     file_ext = "txt" if (prog_args.format == "text") else prog_args.format
-    
-    output_filename= os.path.join(prog_args.output_dir,dataset["datasetID"]+'.'+file_ext)
-    
+
+    output_filename = os.path.join(
+        prog_args.output_dir, dataset["datasetID"] + "." + file_ext,
+    )
+
     """
     Inputs to ComplianceChecker.run_checker
 
@@ -144,13 +155,15 @@ def run_checker(dataset, prog_args):
 
     @returns                If the tests failed (based on the criteria)
     """
-    
+
     return_value, errors = ComplianceChecker.run_checker(
         download_path,
-        checker_names= prog_args.standards,
-        verbose = prog_args.verbose,
-        criteria = "normal",
-        output_filename= os.path.join(prog_args.output_dir,dataset["datasetID"]+'.'+file_ext),
+        checker_names=prog_args.standards,
+        verbose=prog_args.verbose,
+        criteria="normal",
+        output_filename=os.path.join(
+            prog_args.output_dir, dataset["datasetID"] + "." + file_ext,
+        ),
         output_format=prog_args.format,
     )
 
@@ -162,22 +175,23 @@ def run_checker(dataset, prog_args):
 
     # Open the JSON output and get the compliance scores
     if prog_args.format == "json":
-        with open(output_filename, "r") as fp:
+        with open(output_filename) as fp:
             cc_data = json.load(fp)
             for standard in prog_args.standards:
                 scored = cc_data[standard]["scored_points"]
                 possible = cc_data[standard]["possible_points"]
 
-                print(f"{standard}: CC Scored {scored} out of {possible} possible points")
+                print(
+                    f"{standard}: CC Scored {scored} out of {possible} possible points",
+                )
+
 
 def fetch_dataset_sample(prog_args, dataset_id, download_url):
-    """
-    Fetches a NetCDF file from the ERDDAP server, saves it locally to a work 
+    """Fetches a NetCDF file from the ERDDAP server, saves it locally to a work
     directory and returns a path to the file.
     """
-
     response = requests.get(url=download_url)
-    
+
     if response.status_code == 200:
         local_path = Path(prog_args.work, dataset_id + ".nc")
 
@@ -188,8 +202,5 @@ def fetch_dataset_sample(prog_args, dataset_id, download_url):
             file.write(response.content)
 
         return local_path.as_posix()
-    else:
-        print(response.text)
-        return None
-
-
+    print(response.text)
+    return None
